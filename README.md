@@ -28,7 +28,7 @@ The website writes `outbox/finance-summary.json` (format `nt-finance-summary`, v
 
 - A banner shows "Website + phone" with "Website data as of ...", or "Phone only" when no usable summary is loaded.
 - A summary for another month is ignored, and the banner says so. One older than 3 days shows a warning.
-- With a summary loaded you also get the Self budget pace card and read-only Account balances and Card dues cards.
+- With a summary loaded you also get the Self budget pace card and read-only Account balances and Card dues cards. Both are computed on the phone: the snapshot plus phone entries not in `included_phone_entry_ids` and dated on or after the snapshot month start. An entry subtracts its amount from `from_account` and adds it to `to_account` (cards use the same arithmetic). Card spends add to the due on the 4th of next month (spend on day 1 to 13) or the month after (day 14 on); a transfer into a card pays its earliest open due first, never below 0, and any remainder shows as credit. Changed rows are marked with a dot and a "was" value, and a line says how many phone entries are not yet synced.
 - Everything is manual; the app never reads or writes OneDrive by itself.
 
 ## Develop
