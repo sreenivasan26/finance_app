@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatINR, groupIndian, sanitizeAmountInput, groupAmountInput } from './format.js'
+import { formatINR, groupIndian, sanitizeAmountInput, groupAmountInput, fitAmount } from './format.js'
 import { monthSummary, dailyCap } from './summary.js'
 import { validateEntry, parseAmount, uuid4 } from './validation.js'
 import { buildExport, clearExported, clearableEntries, exportStatus, markExported, EXPORT_FIELDS } from './exporter.js'
@@ -93,10 +93,13 @@ describe('validation', () => {
     expect(validateEntry({ ...ok, spend_name: '  ' }, lists).errors.spend_name).toBeTruthy()
     expect(validateEntry({ ...ok, mode: 'Cash' }, lists).errors.mode).toBeTruthy()
   })
-  it('Transfer needs two different accounts', () => {
+  it('Transfer needs a tracked To account and two different accounts', () => {
     const t = { ...ok, type: 'Transfer', from_account: 'HDFC', to_account: null }
     expect(validateEntry(t, lists).errors.to_account).toBeTruthy()
-    expect(validateEntry({ ...t, from_account: null, to_account: 'HDFC' }, lists).errors.from_account).toBeTruthy()
+    const fromOutside = validateEntry({ ...t, from_account: null, to_account: 'HDFC CC' }, lists)
+    expect(fromOutside.ok).toBe(true)
+    expect(fromOutside.entry).toMatchObject({ from_account: null, to_account: 'HDFC CC', type: 'Transfer' })
+    expect(validateEntry({ ...t, from_account: null, to_account: null }, lists).errors.to_account).toBeTruthy() // Outside to Outside
     expect(validateEntry({ ...t, to_account: 'HDFC' }, lists).errors.to_account).toMatch(/different/)
     expect(validateEntry({ ...t, to_account: 'HDFC CC' }, lists).ok).toBe(true)
   })
@@ -171,5 +174,18 @@ describe('dates', () => {
     expect(dayHeader('2026-10-18', NOW)).toBe('TODAY · SUN 18 OCT')
     expect(dayHeader('2026-10-17', NOW)).toBe('SAT 17 OCT')
     expect(daysBetween('2026-10-09T18:40:00', '2026-10-18')).toBe(9)
+  })
+})
+
+describe('hero amount fitting', () => {
+  it('keeps short figures large with paise when they fit', () => {
+    expect(fitAmount(38730)).toEqual({ text: '₹38,730', size: 28 })
+    expect(fitAmount(467.75)).toEqual({ text: '₹467.75', size: 28 })
+    expect(fitAmount(95097.25)).toEqual({ text: '₹95,097.25', size: 24 })
+  })
+  it('drops paise and steps the font down for 7 and 8 figure values', () => {
+    expect(fitAmount(1234567.89)).toEqual({ text: '₹12,34,568', size: 24 })
+    expect(fitAmount(12345678.9)).toEqual({ text: '₹1,23,45,679', size: 20 })
+    expect(fitAmount(1234567890)).toEqual({ text: '₹1,23,45,67,890', size: 17 })
   })
 })

@@ -4,7 +4,7 @@ import { useStore } from '../store.jsx'
 import { dailyCap } from '../lib/summary.js'
 import { adjustedBalances, adjustedDues } from '../lib/balances.js'
 import { combinedSummary, budgetPace, snapshotAgeDays, STALE_SNAPSHOT_DAYS } from '../lib/snapshot.js'
-import { formatINR, compactK } from '../lib/format.js'
+import { formatINR, compactK, fitAmount } from '../lib/format.js'
 import { shortDate, monthTitle, dateTimeLabel } from '../lib/dates.js'
 import { catStyle, Empty, Avatar } from '../ui.jsx'
 
@@ -149,6 +149,11 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
   }
 
   const empty = !s.hasData
+  const both = fitAmount(Math.max(s.expense, s.income))
+  const spent = { text: fitAmount(s.expense).text, size: both.size }
+  const income = { text: fitAmount(s.income).text, size: both.size }
+  const prevExp = s.mode === 'website' ? s.snapshot?.totals?.prev_same_range?.expense : null
+  const vsPrev = prevExp > 0 ? `${s.expense >= prevExp ? 'Up' : 'Down'} ${Math.round((Math.abs(s.expense - prevExp) / prevExp) * 100)}% vs last month` : null
   const subtitle = empty ? 'Nothing captured yet'
     : s.mode === 'website' ? `Website + ${s.phoneAdded} from this phone`
     : `From ${s.count} ${s.count === 1 ? 'entry' : 'entries'} this month`
@@ -166,20 +171,25 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
         <ModeBanner s={s} now={now} onLoad={() => fileRef.current?.click()} loading={loading} />
         {loadError && <div className="banner" role="alert" style={{ borderColor: 'var(--color-danger)', background: 'var(--color-danger-bg)' }}><TriangleAlert size={20} className="ic" style={{ color: 'var(--color-danger)' }} aria-hidden /><div><b style={{ color: 'var(--color-danger)' }}>Could not load the summary</b><span>{loadError}</span></div></div>}
         <StorageBanner status={status} onClick={onGoExport} />
-        <div className={`card hero ${s.expense === 0 ? 'z' : ''}`}>
-          <span className="cap">Spent this month</span>
-          <span className="num">{formatINR(s.expense)}</span>
-          <span className="mut">{empty ? `Fresh month. Summary resets on ${s.resetsOn}.` : `Resets on ${s.resetsOn}`}</span>
+        <div className="card hero" data-testid="hero">
+          <span className="cap">{monthTitle(now)}</span>
+          <div className="hero-cols">
+            <div className="hero-col">
+              <span className="hero-lbl">Spent</span>
+              <span className={`hero-amt ${s.expense === 0 ? 'z' : ''}`} style={{ fontSize: spent.size }} data-testid="hero-spent">{spent.text}</span>
+            </div>
+            <div className="hero-col inc-col">
+              <span className="hero-lbl"><ArrowDownLeft size={14} className="ic" aria-hidden />Income</span>
+              <span className="hero-amt inc" style={{ fontSize: income.size }} data-testid="hero-income">{income.text}</span>
+            </div>
+          </div>
+          {vsPrev && <span className="mut s" data-testid="vs-last">{vsPrev}</span>}
+          <span className="mut s">{empty ? `Fresh month. Resets on ${s.resetsOn}.` : `Resets on ${s.resetsOn}`}</span>
         </div>
         {empty ? (
           <Empty title="Add your first entry" text="The Summary counts this calendar month: the website summary if you load one, plus entries made on this phone. Last month's entries stay in Entries until you clear them." onAdd={onAdd} />
         ) : (
           <>
-            <div className="card tile">
-              <span className="cap"><ArrowDownLeft size={14} className="ic" aria-hidden />Income</span>
-              <span className="n inc">{formatINR(s.income)}</span>
-              <span className="d">{s.income > 0 ? 'This month' : 'None yet'}</span>
-            </div>
             {s.byCategory.length > 0 && (
               <div className="card">
                 <span className="cap">By category</span>

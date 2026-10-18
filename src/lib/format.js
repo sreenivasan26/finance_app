@@ -45,3 +45,13 @@ export function groupAmountInput(s) {
   const [i, d] = s.split('.')
   return groupIndian(i || '0') + (d !== undefined ? '.' + d : '')
 }
+
+// Fits a rupee figure into a half-width hero column: paise are dropped when the text would be too wide,
+// then the font steps down with the length. Returns { text, size } (size in px).
+export function fitAmount(value) {
+  const full = formatINR(value)
+  const text = full.length <= 10 ? full : formatINR(Math.round(value), { decimals: 0 })
+  const n = text.length
+  const size = n <= 8 ? 28 : n <= 10 ? 24 : n <= 12 ? 20 : 17
+  return { text, size }
+}

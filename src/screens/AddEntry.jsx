@@ -238,7 +238,7 @@ export default function AddEntry({ entry, onDone, onToast }) {
         </div>
 
         <div className={d.type === 'Transfer' ? 'two' : ''} style={{ marginTop: 0, marginBottom: 0 }}>
-          {d.type !== 'Income' && <AccountSelect label="From account" value={d.from_account} onChange={(v) => set({ from_account: v })} accounts={lists.accounts} error={errors.from_account} outside={d.type !== 'Transfer'} testid="from" />}
+          {d.type !== 'Income' && <AccountSelect label="From account" value={d.from_account} onChange={(v) => set({ from_account: v })} accounts={lists.accounts} error={errors.from_account} outside testid="from" />}
           {d.type !== 'Expense' && <AccountSelect label="To account" value={d.to_account} onChange={(v) => set({ to_account: v })} accounts={lists.accounts} error={errors.to_account} outside={d.type !== 'Transfer'} testid="to" />}
         </div>
 

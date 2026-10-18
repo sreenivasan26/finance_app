@@ -99,3 +99,27 @@ describe('card dues', () => {
     expect(r.credits).toEqual([])
   })
 })
+
+describe('Transfer from Outside into a card (refund as a transfer)', () => {
+  const refund = (o) => mk({ type: 'Transfer', from_account: null, to_account: 'HDFC CC', amount: 655.88, date: '2026-10-13', ...o })
+  it('raises the card balance (lowers what is owed) and touches no other account', () => {
+    const r = adjustedBalances(snap(), [refund()])
+    expect(r.rows.find((x) => x.name === 'HDFC CC').balance).toBe(-2344.12)
+    expect(r.rows.filter((x) => x.changed).map((x) => x.name)).toEqual(['HDFC CC'])
+    expect(r.syncedCount).toBe(1)
+  })
+  it('reduces the earliest open due like any transfer into the card', () => {
+    const s = snap({ card_dues: [{ card: 'HDFC CC', due_date: '2026-12-04', amount: 2000 }, { card: 'HDFC CC', due_date: '2026-11-04', amount: 3000 }] })
+    const r = adjustedDues(s, [refund()])
+    expect(r.rows.map((x) => [x.due_date, x.amount])).toEqual([['2026-11-04', 2344.12], ['2026-12-04', 2000]])
+    expect(r.credits).toEqual([])
+  })
+  it('a refund bigger than all dues becomes credit; balances and dues agree', () => {
+    const r = adjustedDues(snap(), [refund({ amount: 3200 })])
+    expect(r.rows[0].amount).toBe(0)
+    expect(r.credits).toEqual([{ card: 'HDFC CC', amount: 200 }])
+  })
+  it('an Income into the card does NOT reduce dues', () => {
+    expect(adjustedDues(snap(), [mk({ type: 'Income', from_account: null, to_account: 'HDFC CC', amount: 500 })]).rows[0].amount).toBe(3000)
+  })
+})

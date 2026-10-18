@@ -11,7 +11,8 @@ export function parseAmount(v) {
   return Math.round(parseFloat(s) * 100) / 100
 }
 
-// Validates a form draft like the contract: amount > 0, real date, known lists, Transfer needs both accounts.
+// Validates a form draft like the contract: amount > 0, real date, known lists. A Transfer needs a tracked To account;
+// From may be Outside (null) for refunds and the like, but not equal to To.
 // Returns { ok, errors, entry } where entry is the normalised record (without id / created_at).
 export function validateEntry(draft, { accounts = [], categories = [] } = {}) {
   const errors = {}
@@ -32,8 +33,7 @@ export function validateEntry(draft, { accounts = [], categories = [] } = {}) {
   if (type === 'Expense') to = null
   if (type === 'Income') from = null
   if (type === 'Transfer') {
-    if (!from) errors.from_account = 'Choose the account the money leaves.'
-    if (!to) errors.to_account = 'Choose the account the money goes to.'
+    if (!to) errors.to_account = 'Choose the tracked account the money goes to.'
     if (from && to && from === to) errors.to_account = 'From and to must be different accounts.'
   }
   if (from && !accounts.includes(from)) errors.from_account = 'Unknown account.'
