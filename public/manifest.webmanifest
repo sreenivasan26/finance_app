@@ -1,0 +1,16 @@
+{
+  "name": "Notes and Tasks Capture",
+  "short_name": "Capture",
+  "description": "Capture expenses on your phone and export them to the Notes and Tasks website.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#121921",
+  "background_color": "#0F141A",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
