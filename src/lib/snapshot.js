@@ -1,5 +1,5 @@
 import { currentMonthKey, monthKey, daysBetween, todayStr, daysInMonth } from './dates.js'
-import { monthSummary } from './summary.js'
+import { monthSummary, groupSpends } from './summary.js'
 
 // Website summary snapshot (contract v3.0 addendum 3): format "nt-finance-summary" v1, loaded by hand from a file.
 export const STALE_SNAPSHOT_DAYS = 3
@@ -65,11 +65,30 @@ export function combinedSummary(entries, snapshot, now = new Date()) {
   const income = r2(snapshot.totals.income + ex.income)
   const net = r2(income - expense)
 
+  const cardNames = new Set([
+    ...snapshot.accounts.filter((a) => a.kind === 'card').map((a) => a.name),
+    ...snapshot.card_dues.map((d) => d.card),
+  ])
   const cats = new Map()
-  for (const c of snapshot.by_category) cats.set(c.name, { name: c.name, amount: c.spent, budget: c.budget ?? null })
-  for (const c of ex.byCategory) {
-    const cur = cats.get(c.name) || { name: c.name, amount: 0, budget: null }
-    cats.set(c.name, { ...cur, amount: r2(cur.amount + c.amount) })
+  for (const c of snapshot.by_category) {
+    cats.set(c.name, { name: c.name, amount: c.spent, budget: c.budget ?? null, basis: c.basis || 'all', split: c.split && typeof c.split === 'object' ? { ...c.split } : null })
+  }
+  // Phone additions count toward a category on its own basis: on exclude_card, CC swipes are left out and card payments
+  // (Transfers into a card account) are counted instead, as the website does.
+  for (const e of extra) {
+    if (e.type !== 'Expense' && e.type !== 'Transfer') continue
+    const cur = cats.get(e.category) || { name: e.category, amount: 0, budget: null, basis: 'all', split: null }
+    const exCard = cur.basis === 'exclude_card'
+    let bucket = null
+    if (e.type === 'Expense') {
+      if (exCard && e.mode === 'CC') continue
+      bucket = e.from_account === 'Pluxee' ? 'pluxee' : e.mode === 'CC' ? 'cc' : e.mode === 'UPI' ? 'upi' : 'other'
+    } else {
+      if (!exCard || !e.category || !cardNames.has(e.to_account)) continue
+      bucket = 'other'
+    }
+    const split = cur.split ? { ...cur.split, [bucket]: r2((cur.split[bucket] || 0) + e.amount) } : null
+    cats.set(e.category, { ...cur, amount: r2(cur.amount + e.amount), split })
   }
   const catTotal = [...cats.values()].reduce((t, c) => t + c.amount, 0)
   const byCategory = [...cats.values()].filter((c) => c.amount > 0)
@@ -87,10 +106,10 @@ export function combinedSummary(entries, snapshot, now = new Date()) {
     daily.push({ day: d, date, amount: r2(dayMap.get(date) || 0) })
   }
 
-  const top = [
-    ...snapshot.top_spends.map((t) => ({ id: `w-${t.date}-${t.spend_name}-${t.amount}`, spend_name: t.spend_name, category: t.category, amount: t.amount, date: t.date, type: 'Expense' })),
+  const top = groupSpends([
+    ...snapshot.top_spends.map((t) => ({ spend_name: t.spend_name, category: t.category, amount: t.amount, date: t.date, count: t.count })),
     ...extra.filter((e) => e.type === 'Expense'),
-  ].sort((a, b) => b.amount - a.amount || (a.date < b.date ? 1 : -1)).slice(0, 5)
+  ])
 
   return {
     ...phone,
@@ -114,5 +133,6 @@ export function budgetPace(summary, now = new Date(), name = 'Self') {
   const day = now.getDate()
   const monthPct = Math.round((day / dim) * 100)
   const usedPct = Math.round((spent / budget) * 100)
-  return { name, spent, budget, left: r2(budget - spent), over: spent > budget, daysToGo: dim - day, monthPct, usedPct, abovePace: spent / budget > day / dim }
+  const split = c?.split || null
+  return { name, spent, budget, split, basis: c?.basis || 'all', nextTally: summary.snapshot.next_tally?.category === name ? summary.snapshot.next_tally : null, left: r2(budget - spent), over: spent > budget, daysToGo: dim - day, monthPct, usedPct, abovePace: spent / budget > day / dim }
 }

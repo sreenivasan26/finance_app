@@ -2,16 +2,17 @@ import { User, House, Briefcase, PiggyBank, Plane, Tag, ArrowLeftRight, ArrowDow
 
 const ICONS = { Self: User, Home: House, Office: Briefcase, Savings: PiggyBank, Travel: Plane }
 
-// Colour slot (1..5, then 6) follows the category's place in the editable list, so it stays stable.
+// Colour slot (1..6, then 7) follows the category's place in the editable list, so it stays stable.
+// Colours are the website chart tokens (--color-chart-cat-1..7); the tint is a mix with the surface.
 export function catStyle(name, categories) {
   const i = categories.indexOf(name)
-  const slot = i >= 0 && i < 5 ? i + 1 : 6
-  return { slot, color: `var(--color-fin-${slot})`, bg: `var(--color-fin-${slot}-bg)`, Icon: ICONS[name] || Tag }
+  const slot = i >= 0 && i < 6 ? i + 1 : 7
+  return { slot, color: `var(--color-chart-cat-${slot})`, bg: `color-mix(in srgb, var(--color-chart-cat-${slot}) 22%, var(--color-surface))`, Icon: ICONS[name] || Tag }
 }
 
 export function Avatar({ entry, categories, size = 40 }) {
   if (entry.type === 'Transfer') {
-    return <span className="av" style={{ width: size, height: size, background: 'var(--color-fin-6-bg)', color: 'var(--color-fin-6)' }}><ArrowLeftRight size={20} className="ic" aria-hidden /></span>
+    return <span className="av" style={{ width: size, height: size, background: 'color-mix(in srgb, var(--color-chart-expense) 22%, var(--color-surface))', color: 'var(--color-chart-expense)' }}><ArrowLeftRight size={20} className="ic" aria-hidden /></span>
   }
   if (entry.type === 'Income') {
     return <span className="av" style={{ width: size, height: size, background: 'var(--color-success-bg)', color: 'var(--color-success)' }}><ArrowDownLeft size={20} className="ic" aria-hidden /></span>

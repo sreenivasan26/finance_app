@@ -55,7 +55,8 @@ describe('combinedSummary', () => {
     expect(c.income).toBe(102000)
     expect(c.net).toBe(41500)
     expect(c.phoneAdded).toBe(3)
-    expect(c.byCategory.find((x) => x.name === 'Self').amount).toBe(4500)
+    // the Self transfer into HDFC CC is a card payment: counted on the exclude_card basis (website addendum 4)
+    expect(c.byCategory.find((x) => x.name === 'Self').amount).toBe(9500)
     expect(c.daily.find((d) => d.date === '2026-10-18').amount).toBe(500)
     expect(c.daily[0].amount).toBe(12000)
     expect(c.topSpends[0].spend_name).toBe('Rent')
@@ -91,5 +92,42 @@ describe('Self budget pace', () => {
   it('is absent without a snapshot or a budget', () => {
     expect(budgetPace(combinedSummary([], null, NOW), NOW)).toBeNull()
     expect(budgetPace(combinedSummary([], snap({ by_category: [{ name: 'Self', spent: 1, budget: null }] }), NOW), NOW)).toBeNull()
+  })
+})
+
+describe('F1/F2/F6 basis, split and grouped top spends', () => {
+  const s2 = (o = {}) => snap({
+    by_category: [{ name: 'Self', spent: 4000, budget: 10000, basis: 'exclude_card', split: { pluxee: 500, cc: 0, upi: 3000, other: 500 } }],
+    accounts: [{ name: 'HDFC CC', kind: 'card', balance: 0 }], ...o,
+  })
+  it('exclude_card basis ignores CC phone entries and counts card payments', () => {
+    const entries = [mk({ mode: 'CC', amount: 900 }), mk({ mode: 'UPI', amount: 300 }), mk({ type: 'Transfer', amount: 700, to_account: 'HDFC CC' })]
+    const c = combinedSummary(entries, s2(), NOW)
+    expect(c.expense).toBe(60000 + 900 + 300)
+    const self = c.byCategory.find((x) => x.name === 'Self')
+    expect(self.amount).toBe(5000)
+    expect(self.split).toEqual({ pluxee: 500, cc: 0, upi: 3300, other: 1200 })
+    expect(budgetPace(c, NOW).spent).toBe(5000)
+    expect(budgetPace(c, NOW).split.upi).toBe(3300)
+  })
+  it('all basis counts CC entries', () => {
+    const sn = s2({ by_category: [{ name: 'Self', spent: 4000, budget: 10000, basis: 'all' }] })
+    const c = combinedSummary([mk({ mode: 'CC', amount: 900 })], sn, NOW)
+    expect(c.byCategory[0].amount).toBe(4900)
+  })
+  it('groups top spends by name, case-insensitively, with counts', () => {
+    const sn = s2({ top_spends: [{ spend_name: 'Swiggy', category: 'Self', amount: 1000, date: '2026-10-02', count: 2 }] })
+    const c = combinedSummary([mk({ spend_name: ' swiggy ', amount: 500 }), mk({ spend_name: 'Uber', amount: 100 })], sn, NOW)
+    expect(c.topSpends[0]).toMatchObject({ spend_name: 'swiggy', amount: 1500, count: 3, date: '2026-10-18' })
+    expect(c.topSpends[1]).toMatchObject({ spend_name: 'Uber', count: 1 })
+  })
+  it('phone-only top spends are grouped and skip recurring entries', () => {
+    const s = monthSummary([mk({ amount: 200 }), mk({ spend_name: 'SWIGGY', amount: 300 }), mk({ spend_name: 'EMI', amount: 9000, source: 'recurring' })], NOW)
+    expect(s.topSpends).toHaveLength(1)
+    expect(s.topSpends[0]).toMatchObject({ amount: 500, count: 2 })
+  })
+  it('next tally is exposed on the pace', () => {
+    const c = combinedSummary([], s2({ next_tally: { category: 'Self', amount: 823, date: '2026-11-01' } }), NOW)
+    expect(budgetPace(c, NOW).nextTally.amount).toBe(823)
   })
 })

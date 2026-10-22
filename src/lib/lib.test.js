@@ -59,7 +59,7 @@ describe('month summary', () => {
     expect(s.daily).toHaveLength(18)
     expect(s.daily[0].amount).toBe(12000)
     expect(s.resetsOn).toBe('1 Nov')
-    expect(s.topSpends[0].amount).toBe(12000)
+    expect(s.topSpends[0]).toMatchObject({ amount: 20640, count: 3 }) // same spend_name in the fixture, so grouped
   })
   it('resets on the 1st: the same entries give an empty month in November', () => {
     const nov = monthSummary(entries, new Date(2026, 10, 1, 8, 0, 0))

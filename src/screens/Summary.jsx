@@ -4,7 +4,7 @@ import { useStore } from '../store.jsx'
 import { dailyCap } from '../lib/summary.js'
 import { adjustedBalances, adjustedDues } from '../lib/balances.js'
 import { combinedSummary, budgetPace, snapshotAgeDays, STALE_SNAPSHOT_DAYS } from '../lib/snapshot.js'
-import { formatINR, compactK, fitAmount } from '../lib/format.js'
+import { formatINR, compactK } from '../lib/format.js'
 import { shortDate, monthTitle, dateTimeLabel } from '../lib/dates.js'
 import { catStyle, Empty, Avatar } from '../ui.jsx'
 
@@ -35,7 +35,7 @@ function Donut({ cats, categories, total }) {
     <div className="dwrap">
       <svg width="170" height="170" viewBox="0 0 170 170" role="img" aria-label="Spend by category">
         <g transform="rotate(-90 85 85)">
-          <circle cx="85" cy="85" r={R} fill="none" stroke="var(--color-surface-alt)" strokeWidth="26" />
+          <circle cx="85" cy="85" r={R} fill="none" stroke="var(--color-chart-track)" strokeWidth="26" />
           {cats.map((c) => {
             const len = (c.amount / total) * C
             const seg = Math.max(0, len - (cats.length > 1 ? GAP : 0))
@@ -67,7 +67,7 @@ function DailyBars({ daily, today }) {
         const clipped = d.amount > cap
         return (
           <g key={d.date}>
-            <rect x={x} y={base - h} width={bw} height={h} rx="2" fill={isToday ? 'var(--color-accent)' : 'var(--color-primary)'} />
+            <rect x={x} y={base - h} width={bw} height={h} rx="2" fill={isToday ? 'var(--color-chart-marker)' : 'var(--color-chart-expense)'} />
             {clipped && <text x={x + bw / 2} y={base - h - 3} textAnchor="middle" className="bl">{compactK(d.amount)}</text>}
           </g>
         )
@@ -103,7 +103,21 @@ function ModeBanner({ s, now, onLoad, loading }) {
   )
 }
 
+const SPLIT = [['pluxee', 'Pluxee', 'var(--color-chart-cat-1)'], ['cc', 'CC', 'var(--color-chart-cat-2)'], ['upi', 'UPI', 'var(--color-chart-cat-4)'], ['other', 'Other', 'var(--color-chart-expense)']]
+
 function BudgetPace({ p }) {
+  // Stack the meter by payment source (snapshot by_category split), scaled to the budget and clipped at 100%.
+  let segs = null
+  if (p.split && p.budget > 0) {
+    let left = 0
+    segs = SPLIT.map(([key, label, color]) => ({ key, label, color, v: p.split[key] || 0 })).filter((g) => g.v > 0).map((g) => {
+      const w = Math.max(0, Math.min((g.v / p.budget) * 100, 100 - left))
+      const r = { ...g, left, w }
+      left += w
+      return r
+    })
+    if (!segs.length) segs = null
+  }
   return (
     <div className="card" data-testid="budget-pace">
       <div className="row sb2">
@@ -116,13 +130,20 @@ function BudgetPace({ p }) {
         <span className="mut">of {formatINR(p.budget)}</span>
       </div>
       <div className="meter" role="progressbar" aria-valuenow={Math.min(100, p.usedPct)} aria-valuemin={0} aria-valuemax={100}>
-        <i style={{ width: `${Math.min(100, p.usedPct)}%`, background: p.abovePace ? 'var(--color-warning)' : 'var(--color-primary)' }} />
+        {segs ? segs.map((g) => <i key={g.key} className="seg" data-seg={g.key} style={{ left: `${g.left}%`, width: `${g.w}%`, background: g.color }} />)
+          : <i style={{ width: `${Math.min(100, p.usedPct)}%`, background: p.abovePace ? 'var(--color-warning)' : 'var(--color-primary)' }} />}
         <s style={{ left: `${p.monthPct}%` }} />
       </div>
+      {segs && (
+        <div className="psplit" data-testid="pace-split">
+          {segs.map((g) => <span key={g.key}><i className="sw" style={{ background: g.color }} />{g.label} {formatINR(g.v)}</span>)}
+        </div>
+      )}
       <div className="row sb2 mut s" style={{ marginTop: 8 }}>
         <span>{p.over ? `${formatINR(-p.left)} over` : `${formatINR(p.left)} left`} {'·'} {p.daysToGo} days to go</span>
         <span>Tick: month {p.monthPct}% done</span>
       </div>
+      {p.nextTally && <p className="mut s" style={{ margin: '8px 0 0' }} data-testid="next-tally">Tally due {shortDate(p.nextTally.date)} {formatINR(p.nextTally.amount)}</p>}
     </div>
   )
 }
@@ -149,9 +170,13 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
   }
 
   const empty = !s.hasData
-  const both = fitAmount(Math.max(s.expense, s.income))
-  const spent = { text: fitAmount(s.expense).text, size: both.size }
-  const income = { text: fitAmount(s.income).text, size: both.size }
+  // Three columns: whole rupees, one shared font size so Income, Spent and Saved line up.
+  const txt = (v) => formatINR(Math.round(v), { decimals: 0 })
+  const heroSize = (n) => (n <= 7 ? 22 : n <= 9 ? 18 : n <= 11 ? 15 : 13)
+  const size = heroSize(Math.max(txt(s.expense).length, txt(s.income).length, txt(s.net).length))
+  const spent = { text: txt(s.expense), size }
+  const income = { text: txt(s.income), size }
+  const saved = { text: txt(s.net), size }
   const prevExp = s.mode === 'website' ? s.snapshot?.totals?.prev_same_range?.expense : null
   const vsPrev = prevExp > 0 ? `${s.expense >= prevExp ? 'Up' : 'Down'} ${Math.round((Math.abs(s.expense - prevExp) / prevExp) * 100)}% vs last month` : null
   const subtitle = empty ? 'Nothing captured yet'
@@ -175,12 +200,17 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
           <span className="cap">{monthTitle(now)}</span>
           <div className="hero-cols">
             <div className="hero-col">
+              <span className="hero-lbl"><ArrowDownLeft size={14} className="ic" aria-hidden />Income</span>
+              <span className="hero-amt inc" style={{ fontSize: income.size }} data-testid="hero-income">{income.text}</span>
+            </div>
+            <div className="hero-col nxt-col">
               <span className="hero-lbl">Spent</span>
               <span className={`hero-amt ${s.expense === 0 ? 'z' : ''}`} style={{ fontSize: spent.size }} data-testid="hero-spent">{spent.text}</span>
             </div>
-            <div className="hero-col inc-col">
-              <span className="hero-lbl"><ArrowDownLeft size={14} className="ic" aria-hidden />Income</span>
-              <span className="hero-amt inc" style={{ fontSize: income.size }} data-testid="hero-income">{income.text}</span>
+            <div className="hero-col nxt-col">
+              <span className="hero-lbl">Saved</span>
+              <span className={`hero-amt ${s.net === 0 ? 'z' : ''}`} style={{ fontSize: saved.size, ...(s.net < 0 ? { color: 'var(--color-danger)' } : null) }} data-testid="hero-saved">{saved.text}</span>
+              {s.keptPct !== null && <span className="hero-sub" data-testid="hero-kept">{s.keptPct}% kept</span>}
             </div>
           </div>
           {vsPrev && <span className="mut s" data-testid="vs-last">{vsPrev}</span>}
@@ -212,8 +242,8 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
                 <div className="row sb2"><span className="cap">Daily spend</span><span className="mut s">capped at {formatINR(dailyCap(s.daily))}</span></div>
                 <div style={{ marginTop: 10 }}><DailyBars daily={s.daily} today={s.today} /></div>
                 <div className="legend">
-                  <span><i className="sw" style={{ background: 'var(--color-primary)' }} />Day</span>
-                  <span><i className="sw" style={{ background: 'var(--color-accent)' }} />Today</span>
+                  <span><i className="sw" style={{ background: 'var(--color-chart-expense)' }} />Day</span>
+                  <span><i className="sw" style={{ background: 'var(--color-chart-marker)' }} />Today</span>
                 </div>
               </div>
             )}
@@ -224,7 +254,7 @@ export default function Summary({ onAdd, onGoExport, onToast }) {
                   {s.topSpends.map((e) => (
                     <div className="trow" key={e.id}>
                       <Avatar entry={e} categories={lists.categories} size={44} />
-                      <div className="tm"><b>{e.spend_name}</b><span>{e.category} {'·'} {shortDate(e.date)}</span></div>
+                      <div className="tm" title={e.count > 1 ? `Latest ${shortDate(e.date)}` : undefined}><b>{e.spend_name}</b><span>{e.category} {'·'} {e.count > 1 ? `${e.count} entries` : shortDate(e.date)}</span></div>
                       <span className="amt">{formatINR(e.amount)}</span>
                     </div>
                   ))}
